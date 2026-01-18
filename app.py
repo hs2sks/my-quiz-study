@@ -750,11 +750,18 @@ if "preset_on" not in st.session_state:
 if "mixed_choice_ratio" not in st.session_state:
     st.session_state["mixed_choice_ratio"] = 50
 if "gemini_model" not in st.session_state:
-    st.session_state["gemini_model"] = "gemini-3-flash-preview"
+    st.session_state["gemini_model"] = "gemini-2.5-flash-preview"
 if "current_pdf_name" not in st.session_state:
     st.session_state["current_pdf_name"] = ""
 if "use_custom_file" not in st.session_state:
     st.session_state["use_custom_file"] = False
+
+# 사용 가능한 Gemini 모델 리스트
+AVAILABLE_MODELS = [
+    "gemini-2.5-flash-preview",
+    "gemini-3-flash-preview",
+    "gemini-1.5-flash"
+]
 
 # 기본 PDF 자동 로드 (교직실무.pdf)
 DEFAULT_PDF_PATH = "교직실무.pdf"
@@ -874,13 +881,22 @@ with col_right:
     num_choices = 4
     distractor_mode = "혼동(유사 문자)"
     use_gemini = st.checkbox(
-        "Gemini로 문항 생성 (gemini-3-flash-preview)",
+        "Gemini로 문항 생성",
         value=True,
         help="GEMINI_API_KEY가 secrets 또는 환경변수에 필요",
     )
     
-    # Gemini 모델 고정
-    gemini_model = st.session_state["gemini_model"]
+    if use_gemini:
+        gemini_model = st.selectbox(
+            "Gemini 모델 선택",
+            options=AVAILABLE_MODELS,
+            index=AVAILABLE_MODELS.index(st.session_state["gemini_model"]) if st.session_state["gemini_model"] in AVAILABLE_MODELS else 0,
+            key="gemini_model_select"
+        )
+        st.session_state["gemini_model"] = gemini_model
+    else:
+        gemini_model = st.session_state["gemini_model"]
+    
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         if st.button("문항 생성"):
@@ -912,7 +928,13 @@ with col_right:
                             mixed_choice_ratio,
                         )
                 except Exception as exc:
-                    st.error(f"Gemini 생성 실패: {exc}")
+                    exc_str = str(exc)
+                    if "429" in exc_str or "quota" in exc_str.lower():
+                        st.error("🚨 **Gemini 할당량 초과!**")
+                        st.warning("현재 선택한 모델의 무료 사용량이 소진되었습니다. 다른 모델(예: 2.5-flash)을 선택하거나, 약 1분 후에 다시 시도해 주세요.")
+                    else:
+                        st.error(f"Gemini 생성 실패: {exc}")
+                    
                     st.info("로컬 생성으로 대체합니다.")
                     st.session_state["questions"] = generate_questions(
                         sentences,
