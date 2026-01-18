@@ -4,6 +4,5 @@ pytesseract==0.3.10
 pdf2image==1.17.0
 pillow==10.4.0
 opencv-python-headless
-numpy==2.1.3
-
+numpy
 google-generativeai==0.8.3
