@@ -722,6 +722,34 @@ def reset_state() -> None:
             del st.session_state[key]
 
 
+# --- Gemini 모델 리스트 가져오기 ---
+@st.cache_data(ttl=3600)
+def get_available_gemini_models():
+    api_key = get_gemini_api_key()
+    if not api_key:
+        return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
+    try:
+        genai.configure(api_key=api_key)
+        models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # 'models/' 접두사 제거
+                name = m.name.split('/')[-1]
+                models.append(name)
+        
+        # 선호하는 순서대로 정렬 (3.0 -> 2.0 -> 1.5 순)
+        def sort_key(name):
+            if "gemini-3" in name: return 0
+            if "gemini-2.0" in name: return 1
+            if "gemini-1.5" in name: return 2
+            return 3
+            
+        models.sort(key=sort_key)
+        return models if models else ["gemini-1.5-flash", "gemini-1.5-pro"]
+    except Exception:
+        return ["gemini-1.5-flash", "gemini-1.5-pro"]
+
+
 st.set_page_config(page_title="PDF 문항 생성기", layout="wide")
 st.title("PDF 문항 생성기")
 st.caption("PDF 내용을 기반으로 간단한 문제를 자동 생성합니다. (Version 2.0)")
@@ -750,18 +778,16 @@ if "preset_on" not in st.session_state:
 if "mixed_choice_ratio" not in st.session_state:
     st.session_state["mixed_choice_ratio"] = 50
 if "gemini_model" not in st.session_state:
-    st.session_state["gemini_model"] = "gemini-2.5-flash-preview"
+    st.session_state["gemini_model"] = "gemini-1.5-flash"
 if "current_pdf_name" not in st.session_state:
     st.session_state["current_pdf_name"] = ""
 if "use_custom_file" not in st.session_state:
     st.session_state["use_custom_file"] = False
 
-# 사용 가능한 Gemini 모델 리스트
-AVAILABLE_MODELS = [
-    "gemini-2.5-flash-preview",
-    "gemini-3-flash-preview",
-    "gemini-1.5-flash"
-]
+# 사용 가능한 Gemini 모델 리스트 가져오기
+AVAILABLE_MODELS = get_available_gemini_models()
+if st.session_state["gemini_model"] not in AVAILABLE_MODELS:
+    st.session_state["gemini_model"] = AVAILABLE_MODELS[0]
 
 # 기본 PDF 자동 로드 (교직실무.pdf)
 DEFAULT_PDF_PATH = "교직실무.pdf"
@@ -891,7 +917,8 @@ with col_right:
             "Gemini 모델 선택",
             options=AVAILABLE_MODELS,
             index=AVAILABLE_MODELS.index(st.session_state["gemini_model"]) if st.session_state["gemini_model"] in AVAILABLE_MODELS else 0,
-            key="gemini_model_select"
+            key="gemini_model_select",
+            help="내 API 키로 사용 가능한 모델 목록입니다."
         )
         st.session_state["gemini_model"] = gemini_model
     else:
